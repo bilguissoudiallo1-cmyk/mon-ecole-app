@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Mon École — Gestion scolaire</title>
+  <meta name="description" content="Application de gestion scolaire hors-ligne : élèves, notes, classement, enseignants, emploi du temps." />
+
+  <!-- Installation en tant qu'application (PWA) -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#1B2A4A" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Mon École" />
+
+  <style>
+    html, body { margin: 0; padding: 0; background: #EDE4D3; }
+    #root { min-height: 100vh; }
+    #initial-loader {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #EDE4D3; font-family: sans-serif; color: #1B2A4A; flex-direction: column; gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="initial-loader">
+      <div>Chargement de l'application…</div>
+    </div>
+  </div>
+  <script src="./bundle.js"></script>
+</body>
+</html>

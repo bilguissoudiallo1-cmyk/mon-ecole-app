@@ -1,0 +1,19 @@
+{
+  "name": "mon-ecole-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application de gestion scolaire - eleves, notes, classement, enseignants, emploi du temps. Fonctionne hors-ligne, installable.",
+  "scripts": {
+    "build": "esbuild src/main.jsx --bundle --outfile=public/bundle.js --minify --target=es2018 --loader:.js=jsx"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5",
+    "lucide-react": "^1.28.0",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
