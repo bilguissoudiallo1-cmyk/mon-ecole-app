@@ -11,19 +11,20 @@
  * localStorage (voir src/storage.js) — ce fichier ne gère que le code.
  */
 
-const CACHE_VERSION = "ecole-app-v4";
+const CACHE_VERSION = "ecole-app-v5";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./bundle.js",
+  "./firebase-config.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-192.png",
   "./icons/icon-maskable-512.png",
 ];
 
-const APP_SHELL_PATHS = ["./", "/", "./index.html", "./bundle.js", "./manifest.json"];
+const APP_SHELL_PATHS = ["./", "/", "./index.html", "./bundle.js", "./manifest.json", "./firebase-config.js"];
 
 function isAppShellRequest(request) {
   if (request.mode === "navigate") return true;

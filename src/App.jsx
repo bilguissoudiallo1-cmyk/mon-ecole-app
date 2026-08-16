@@ -172,30 +172,34 @@ export default function EcoleApp() {
 
   const firstLoad = useRef(true);
   const saveTimer = useRef(null);
+  const lastSyncedRef = useRef(null); // évite de ré-appliquer notre propre écriture
 
-  /* ---------- chargement initial ---------- */
+  /* ---------- chargement + écoute en temps réel des autres appareils ---------- */
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await window.storage.get(STORAGE_KEY, true);
-        if (res && res.value) {
-          const parsed = JSON.parse(res.value);
-          setSchoolName(parsed.schoolName || "Mon École");
-          setStudents(parsed.students || []);
-          setSubjects(parsed.subjects && parsed.subjects.length ? parsed.subjects : DEFAULT_SUBJECTS);
-          setGrades(parsed.grades || {});
-          setTeachers(parsed.teachers || []);
-          setSchedules(parsed.schedules || {});
-          setAdmins(parsed.admins && parsed.admins.length ? parsed.admins : [SEED_ADMIN]);
-        } else {
-          setAdmins([SEED_ADMIN]);
-        }
-      } catch (e) {
-        // pas encore de données -> on démarre avec la base vide
-        setAdmins([SEED_ADMIN]);
-      } finally {
+    const unsub = window.storage.subscribe(STORAGE_KEY, (rawValue) => {
+      if (rawValue == null) {
+        setAdmins((prev) => prev || [SEED_ADMIN]);
         setLoading(false);
+        return;
       }
+      if (rawValue === lastSyncedRef.current) return; // c'est l'écho de notre propre écriture
+      lastSyncedRef.current = rawValue;
+      try {
+        const parsed = JSON.parse(rawValue);
+        setSchoolName(parsed.schoolName || "Mon École");
+        setStudents(parsed.students || []);
+        setSubjects(parsed.subjects && parsed.subjects.length ? parsed.subjects : DEFAULT_SUBJECTS);
+        setGrades(parsed.grades || {});
+        setTeachers(parsed.teachers || []);
+        setSchedules(parsed.schedules || {});
+        setAdmins(parsed.admins && parsed.admins.length ? parsed.admins : [SEED_ADMIN]);
+      } catch (e) {
+        // donnée illisible, on ignore cette mise à jour
+      }
+      setLoading(false);
+    });
+
+    (async () => {
       try {
         const nameRes = await window.storage.get(NAME_KEY, false);
         if (nameRes && nameRes.value) setChatNameState(nameRes.value);
@@ -203,23 +207,22 @@ export default function EcoleApp() {
         // pas de nom enregistré
       }
     })();
+
+    return unsub;
   }, []);
 
-  /* ---------- messagerie (partagée, avec actualisation périodique) ---------- */
+  /* ---------- messagerie (temps réel entre tous les appareils) ---------- */
   useEffect(() => {
-    const loadMessages = async () => {
+    const unsub = window.storage.subscribe(MESSAGES_KEY, (rawValue) => {
+      if (rawValue == null) { setMessages([]); return; }
       try {
-        const res = await window.storage.get(MESSAGES_KEY, true);
-        if (res && res.value) setMessages(JSON.parse(res.value));
+        setMessages(JSON.parse(rawValue));
       } catch (e) {
-        // pas encore de messages
+        // donnée illisible, on ignore
       }
-    };
-    loadMessages();
-    let interval;
-    if (page === "chat") interval = setInterval(loadMessages, 4000);
-    return () => interval && clearInterval(interval);
-  }, [page]);
+    });
+    return unsub;
+  }, []);
 
   const setChatName = async (name) => {
     setChatNameState(name);
@@ -241,7 +244,7 @@ export default function EcoleApp() {
     }
   };
 
-  /* ---------- sauvegarde (debounce) ---------- */
+  /* ---------- sauvegarde (debounce) — se synchronise automatiquement sur tous les appareils ---------- */
   useEffect(() => {
     if (loading) return;
     if (firstLoad.current) { firstLoad.current = false; return; }
@@ -250,6 +253,7 @@ export default function EcoleApp() {
     saveTimer.current = setTimeout(async () => {
       try {
         const payload = JSON.stringify({ schoolName, students, subjects, grades, teachers, schedules, admins });
+        lastSyncedRef.current = payload;
         const res = await window.storage.set(STORAGE_KEY, payload, true);
         setSaveState(res ? "saved" : "error");
       } catch (e) {
