@@ -5,7 +5,7 @@ import {
   Settings, Download, Printer, Plus, Trash2, Pencil, X, Search,
   ChevronRight, School, Save, Loader2, AlertCircle, MessageSquare,
   Upload, Star, BarChart3, Send, UserCheck, CalendarDays, Database,
-  WifiOff, LogOut, Lock, KeyRound, Eye, EyeOff
+  WifiOff, LogOut, Lock, KeyRound, Eye, EyeOff, Award
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -145,6 +145,7 @@ export default function EcoleApp() {
   const [grades, setGrades] = useState({});
   const [teachers, setTeachers] = useState([]);
   const [schedules, setSchedules] = useState({});
+  const [examCandidates, setExamCandidates] = useState({ entree7eme: {}, bepc: {} });
 
   const [page, setPage] = useState("accueil");
   const [role, setRole] = useState(null); // null = pas encore connecté
@@ -192,6 +193,7 @@ export default function EcoleApp() {
         setGrades(parsed.grades || {});
         setTeachers(parsed.teachers || []);
         setSchedules(parsed.schedules || {});
+        setExamCandidates(parsed.examCandidates || { entree7eme: {}, bepc: {} });
         setAdmins(parsed.admins && parsed.admins.length ? parsed.admins : [SEED_ADMIN]);
       } catch (e) {
         // donnée illisible, on ignore cette mise à jour
@@ -252,7 +254,7 @@ export default function EcoleApp() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        const payload = JSON.stringify({ schoolName, students, subjects, grades, teachers, schedules, admins });
+        const payload = JSON.stringify({ schoolName, students, subjects, grades, teachers, schedules, admins, examCandidates });
         lastSyncedRef.current = payload;
         const res = await window.storage.set(STORAGE_KEY, payload, true);
         setSaveState(res ? "saved" : "error");
@@ -261,7 +263,7 @@ export default function EcoleApp() {
       }
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [schoolName, students, subjects, grades, teachers, schedules, admins, loading]);
+  }, [schoolName, students, subjects, grades, teachers, schedules, admins, examCandidates, loading]);
 
   const studentsInClass = (classId) => students.filter((s) => s.classId === classId);
 
@@ -294,6 +296,13 @@ export default function EcoleApp() {
     }));
   };
 
+  /* ---------- actions candidats aux examens nationaux ---------- */
+  const setExamStatus = (examType, studentId, patch) => {
+    setExamCandidates((prev) => ({
+      ...prev,
+      [examType]: { ...(prev[examType] || {}), [studentId]: { ...(prev[examType]?.[studentId] || {}), ...patch } },
+    }));
+  };
   /* ---------- actions comptes administrateurs ---------- */
   const addAdmin = (admin) => setAdmins((prev) => [...prev, { id: uid(), ...admin }]);
   const removeAdmin = (id) => setAdmins((prev) => (prev.length > 1 ? prev.filter((a) => a.id !== id) : prev));
@@ -493,6 +502,7 @@ export default function EcoleApp() {
               <NavItem icon={<Star size={17} />} label="Palmarès" active={page === "palmares"} onClick={() => setPage("palmares")} />
               <NavItem icon={<BarChart3 size={17} />} label="Statistiques" active={page === "stats"} onClick={() => setPage("stats")} />
               <NavItem icon={<Upload size={17} />} label="Importer" active={page === "import"} onClick={() => setPage("import")} />
+              <NavItem icon={<Award size={17} />} label="Examens" active={page === "examens"} onClick={() => setPage("examens")} />
               <NavItem icon={<KeyRound size={17} />} label="Sécurité" active={page === "securite"} onClick={() => setPage("securite")} />
             </>
           )}
@@ -603,6 +613,10 @@ export default function EcoleApp() {
 
         {page === "import" && role === "direction" && (
           <ImportPage addManyStudents={addManyStudents} />
+        )}
+
+        {page === "examens" && role === "direction" && (
+          <ExamensPage students={students} grades={grades} subjects={subjects} examCandidates={examCandidates} setExamStatus={setExamStatus} schoolName={schoolName} />
         )}
 
         {page === "securite" && role === "direction" && (
@@ -1466,6 +1480,134 @@ function ChatPage({ messages, sendMessage, chatName, setChatName, role }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page: Direction                                                     */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/*  Page: Examens nationaux (Entrée en 7ème, BEPC)                      */
+/* ------------------------------------------------------------------ */
+
+const EXAM_DEFS = {
+  entree7eme: { label: "Entrée en 7ème", classId: "a6", sheetName: "Candidats Entrée 7ème" },
+  bepc: { label: "BEPC", classId: "a10", sheetName: "Candidats BEPC" },
+};
+
+function ExamensPage({ students, grades, subjects, examCandidates, setExamStatus, schoolName }) {
+  const [examType, setExamType] = useState("entree7eme");
+  const def = EXAM_DEFS[examType];
+  const cls = CLASSES.find((c) => c.id === def.classId);
+  const candidates = students
+    .filter((s) => s.classId === def.classId)
+    .map((s) => ({ ...s, moyenne: computeAverage(s.id, grades, subjects), info: examCandidates[examType]?.[s.id] || {} }))
+    .sort((a, b) => a.lastName.localeCompare(b.lastName));
+
+  const counts = candidates.reduce(
+    (acc, c) => {
+      const statut = c.info.statut || "en_attente";
+      acc[statut] = (acc[statut] || 0) + 1;
+      return acc;
+    },
+    { admis: 0, non_admis: 0, en_attente: 0 }
+  );
+
+  const exportList = () => {
+    const rows = candidates.map((c) => ({
+      Nom: c.lastName,
+      Prénom: c.firstName,
+      "Date de naissance": c.birthDate || "",
+      Sexe: c.sexe === "G" ? "Garçon" : "Fille",
+      "Numéro de table": c.info.numeroTable || "",
+      ...(examType === "bepc" ? { "Moyenne annuelle": c.moyenne ?? "" } : {}),
+      Statut: c.info.statut === "admis" ? "Admis" : c.info.statut === "non_admis" ? "Non admis" : "En attente",
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, def.sheetName.slice(0, 31));
+    XLSX.writeFile(wb, `${schoolName.replace(/\s+/g, "_")}_${def.label.replace(/\s+/g, "_")}.xlsx`);
+  };
+
+  return (
+    <div className="page">
+      <header className="page-head">
+        <p className="eyebrow">Réservé à la direction</p>
+        <h1>Examens nationaux</h1>
+        <p className="lede">Suivi des candidats à l'entrée en 7ème année et au BEPC, à partir des élèves inscrits en {cls.name}.</p>
+      </header>
+
+      <div className="toolbar">
+        <div className="mode-switch">
+          {Object.entries(EXAM_DEFS).map(([key, d]) => (
+            <button key={key} className={examType === key ? "active" : ""} onClick={() => setExamType(key)}>{d.label}</button>
+          ))}
+        </div>
+        <button className="primary-btn" onClick={exportList}><Download size={15} /> Exporter la liste</button>
+      </div>
+
+      <div className="stat-row">
+        <div className="stat-card">
+          <span className="stat-label">Candidats</span>
+          <span className="stat-value">{candidates.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Admis</span>
+          <span className="stat-value" style={{ color: "var(--green)" }}>{counts.admis}</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Non admis</span>
+          <span className="stat-value" style={{ color: "var(--red)" }}>{counts.non_admis}</span>
+        </div>
+      </div>
+
+      <div className="ledger">
+        <table>
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Prénom</th>
+              {examType === "bepc" && <th className="mono-col">Moyenne</th>}
+              <th>N° de table</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.length === 0 && (
+              <tr><td colSpan={examType === "bepc" ? 5 : 4} className="empty-row">Aucun élève inscrit en {cls.name} pour l'instant.</td></tr>
+            )}
+            {candidates.map((c) => (
+              <tr key={c.id}>
+                <td>{c.lastName}</td>
+                <td>{c.firstName}</td>
+                {examType === "bepc" && <td className="mono-col">{c.moyenne ?? "—"}</td>}
+                <td>
+                  <input
+                    className="cell-input mono-col"
+                    style={{ width: 90 }}
+                    placeholder="—"
+                    value={c.info.numeroTable || ""}
+                    onChange={(e) => setExamStatus(examType, c.id, { numeroTable: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <select
+                    className="cell-input"
+                    value={c.info.statut || "en_attente"}
+                    onChange={(e) => setExamStatus(examType, c.id, { statut: e.target.value })}
+                  >
+                    <option value="en_attente">En attente</option>
+                    <option value="admis">Admis</option>
+                    <option value="non_admis">Non admis</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
